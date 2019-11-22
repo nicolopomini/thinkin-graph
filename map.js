@@ -196,6 +196,18 @@ class OpenLayersPlanView {
             } catch(e) {}
         });
         that.map.addInteraction(draw);
+        const select = new ol.interaction.Select({
+            source: that.shapeSource
+        });
+        select.on('select', function(evt) {
+            let id = evt.selected[0].id;
+            if (!id)
+                id = evt.selected[0].getId();
+            let table = $("#tableNodes").DataTable();
+            let row = table.row("#" + id);
+            row.show().draw(false);
+        });
+        that.map.addInteraction(select);
     }
 
     addNodeControl(rectangle) {
@@ -216,10 +228,13 @@ class OpenLayersPlanView {
             content.push("<select class=\"form-control\" size=\"1\" id='" + rectangle.uuid + "nodeType'><option value=''>-</option><option>AISLE</option><option>ACTION_ALLEY</option><option>CORRIDOR</option></select>");
         else
             content.push(type);
-        content.push("<button type='submit' class='btn btn-default' onclick='applyNames(\"" + rectangle.uuid + "\")'>Apply</button><button type='submit' class='btn btn-default' onclick='editShape(\"" + rectangle.uuid + "\")'>Edit</button><button type='submit' class='btn btn-default' onclick='deleteShape(\"" + rectangle.uuid + "\")'>Delete</button>");
+        content.push("<button type='submit' class='btn btn-default' onclick='applyNames(\"" + rectangle.uuid + "\")'>Apply</button><button type='submit' class='btn btn-default' onclick='editShape(\"" + rectangle.uuid + "\")'>Edit</button><button type='submit' class='btn btn-default' onclick='deleteShape(\"" + rectangle.uuid + "\")'>Delete</button><button type='button' class='btn btn-default' onclick='openModal(\"" + rectangle.uuid + "\")'>Split</button>");
         let api = table.row.add(content);
         api.node().id = rectangle.uuid;
-        api.draw(false);
+        api.show().draw(false);
+        $("#" + rectangle.uuid + "nodeId,#" + rectangle.uuid + "nodeName,#" + rectangle.uuid + "nodeType").hover(() => {
+            this.selectShape(rectangle.uuid);
+        });
     }
 
     deleteShape(id) {
@@ -361,6 +376,15 @@ class OpenLayersPlanView {
             this.shapeSource.addFeature(rectObj.feature);
             this.addNodeControl(rectObj);
         });
+    }
+    splitRectangle(rectId, length, spaceBetween) {
+        let shape = this.shapes[rectId];
+        shape.splitRectangle(length, spaceBetween);
+    }
+    splitAll(length, spaceBetween) {
+        for (let id in this.shapes) {
+            this.shapes[id].splitRectangle(length, spaceBetween);
+        }
     }
 }
 
@@ -543,6 +567,34 @@ class Rectangle{
         rect.feature.id = rect.uuid;
         return rect;
     }
+    splitRectangle(length, spaceBetween) {
+        let segments = [];
+        let vertical = true;
+        let current = this.lowerLeft;
+        if ((this.lowerRight.x - this.lowerLeft.x) > (this.upperLeft.y - this.lowerLeft.y)) 
+            vertical = false;
+        let remainingSpace = vertical ? this.upperLeft.y - this.lowerLeft.y : this.lowerRight.x - this.lowerLeft.x;
+        while (remainingSpace >= length) { // da riguardare, non sono convinto
+            let points = [];
+            if (vertical) {
+                points.push(current);
+                points.push(new Point(this.lowerRight.x, current.y));
+                points.push(new Point(this.lowerRight.x, current.y + length));
+                points.push(new Point(current.x, current.y + length));
+                points.push(current);
+                current = new Point(current.x, current.y + spaceBetween);
+            } else {
+                points.push(current);
+                points.push(new Point(current.x + length, current.y));
+                points.push(new Point(current.x + length, this.upperLeft.y));
+                points.push(new Point(current.x, this.upperLeft.y));
+                points.push(current);
+            }
+            segments.push(new Segment(points));
+            remainingSpace = vertical ? current.y - this.lowerLeft.y : current.x - this.lowerLeft.x;
+        }
+        console.log(segments);
+    }
 }
 
 class Point{
@@ -579,6 +631,40 @@ class ActionConnect{
         this.fig1 = fig1;   // rectangle
         this.fig2 = fig2;   // rectangle
         this.line = line;   // feature
+    }
+}
+
+class Segment {
+    constructor(edges) {
+        let polygon = new ol.geom.Polygon([edges]);
+        this.feature = new ol.Feature(polygon);
+        this.uuid = Rectangle.create_UUID();
+        this.feature.id = this.uuid;
+    }
+    toRepr() {
+        let format = new ol.format.WKT();
+        let wkt = format.writeGeometry(this.feature.getGeometry(), {decimals: 0});
+        return {
+            "uuid": this.uuid,
+            "wkt": wkt
+        };
+    }
+}
+
+class SegmentedRectangle {
+    constructor(segments, mainShapeId) {
+        this.segments = segments;
+        this.mainShapeId = mainShapeId;
+    }
+    toRepr() {
+        let segmentsRepr = [];
+        this.segments.forEach((x) => {
+            segmentsRepr.push(x.toRepr());
+        });
+        return {
+            "mainShapeId": this.mainShapeId,
+            "segments": segmentsRepr
+        };
     }
 }
 
@@ -697,6 +783,35 @@ function deleteAll() {
             btn.click();
         }
     });
+}
+$.fn.dataTable.Api.register('row().show()', function() {
+    var page_info = this.table().page.info();
+    // Get row index
+    var new_row_index = this.index();
+    // Row position
+    var row_position = this.table().rows()[0].indexOf( new_row_index );
+    // Already on right page ?
+    if( row_position >= page_info.start && row_position < page_info.end ) {
+        // Return row object
+        return this;
+    }
+    // Find page number
+    var page_to_display = Math.floor( row_position / this.table().page.len() );
+    // Go to that page
+    this.table().page( page_to_display );
+    // Return row object
+    return this;
+});
+function openModal(id) {
+    $("#shapeIdModal").val(id);
+    $("#splitModal").modal('show');
+}
+function splitSingle() {
+    $("#splitModal").modal('hide');
+    var shapeId = $("#shapeIdModal").val();
+    var segmentSize = $("#segmentSize").val();
+    var spaceBetween = $("#segmentSpace").val();
+    planView.splitRectangle(shapeId, segmentSize, spaceBetween);
 }
 /*
 Aggiungere:
