@@ -51,7 +51,7 @@
 
 </head>
 <body onload="init()">
-  <!-- Modal -->
+  <!--Single split Modal -->
     <div class="modal fade" id="splitModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
       <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -79,6 +79,37 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
             <button type="button" class="btn btn-primary" onclick="splitSingle()">Split</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  <!--All split Modal -->
+    <div class="modal fade" id="splitAllModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            <h4 class="modal-title" id="myModalLabel">Split all the shapes</h4>
+          </div>
+          <div class="modal-body">
+            <form>
+              <div class="form-group">
+                <label for="segmentSize">Segment length (mm)</label>
+                <div class="col-sm-10">
+                  <input type="number" class="form-control" id="allSegmentSize" value="1000" min="0">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="segmentSpace">Space between segments (mm)</label>
+                <div class="col-sm-10">
+                  <input type="number" class="form-control" id="allSegmentSpace" value="0" min="0">
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" onclick="splitAll()">Split all</button>
           </div>
         </div>
       </div>
@@ -139,6 +170,7 @@
                         <button type='submit' class='btn btn-default' onclick='applyAll()'>Apply All</button>
                         <button type='submit' class='btn btn-default' onclick='editAll()'>Edit All</button>
                         <button type='submit' class='btn btn-default' onclick='deleteAll()'>Delete All</button>
+                        <button type='submit' class='btn btn-default' data-toggle="modal" data-target="#splitAllModal">Split All</button>
                       </th>
                   </tr>
                   </thead>

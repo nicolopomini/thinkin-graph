@@ -27,11 +27,14 @@ class OpenLayersPlanView {
         this.actions = [];
         this.undoButton = undoButton;
         this.shapes = {};
+        this.splittedShapes = {};
+        this.splittedToShape = {};
         this.map = null;
         this.projection = null;
         this.drawSource = null;
         this.shapeSource = null;
         this.shapeLayer = null;
+        this.splittedShapeSource = null;
         this.initializeEnvironment(environment);
         this.modeDraw();
     }
@@ -84,8 +87,14 @@ class OpenLayersPlanView {
             projection: projection
         });
 
+        let splittedShapeSource = new ol.source.Vector({});
+        let splittedShapeLayer = new ol.layer.Vector({
+            source: splittedShapeSource,
+            projection: projection
+        });
+
         var map = new ol.Map({
-            layers: [envLayer, drawLayer, shapeLayer],
+            layers: [envLayer, drawLayer, shapeLayer, splittedShapeLayer],
             target: divId,
             view: new ol.View({
                 projection: projection,
@@ -99,6 +108,7 @@ class OpenLayersPlanView {
         this.drawSource = drawSource;
         this.shapeSource = shapeSource;
         this.shapeLayer = shapeLayer;
+        this.splittedShapeSource = splittedShapeSource;
     }
 
     initializeEnvironmentMap(divId, environmentInfo) {
@@ -203,6 +213,8 @@ class OpenLayersPlanView {
             let id = evt.selected[0].id;
             if (!id)
                 id = evt.selected[0].getId();
+            if (!(id in that.shapes))
+                id = that.splittedToShape[id];
             let table = $("#tableNodes").DataTable();
             let row = table.row("#" + id);
             row.show().draw(false);
@@ -357,18 +369,25 @@ class OpenLayersPlanView {
     }
 
     exportRaw() {
-        let content = [];
+        let shapes = [];
         for (let key in this.shapes) {
-            content.push(this.shapes[key].toRepr());
+            shapes.push(this.shapes[key].toRepr());
         }
-        return content;
+        let splitted = [];
+        for (let key in this.splittedShapes) {
+            splitted.push(this.splittedShapes[key].toRepr());
+        }
+        return {
+            "shapes": shapes,
+            "splittedShapes": splitted
+        };
     }
     importRaw(content) {
         let shapes = [];
-        if (!Array.isArray(content)) {;
-            shapes.push(content);
+        if (!Array.isArray(content["shapes"])) {;
+            shapes.push(content["shapes"]);
         } else {
-            shapes = content;
+            shapes = content["shapes"];
         }
         shapes.forEach((rect) => {
             let rectObj = Rectangle.fromRepr(rect);
@@ -376,14 +395,32 @@ class OpenLayersPlanView {
             this.shapeSource.addFeature(rectObj.feature);
             this.addNodeControl(rectObj);
         });
+        content["splittedShapes"].forEach((splitted) => {
+            let splittedShape = SegmentedRectangle.fromRepr(splitted);
+            this.splittedShapes[splittedShape.mainShapeId] = splittedShape;
+            splittedShape.segments.forEach((segment) => {
+                this.splittedShapeSource.addFeature(segment.feature);
+                this.splittedToShape[segment.uuid] = rectId;
+            });
+        });
     }
     splitRectangle(rectId, length, spaceBetween) {
+        length = parseFloat(length);
+        spaceBetween = parseFloat(spaceBetween);
         let shape = this.shapes[rectId];
-        shape.splitRectangle(length, spaceBetween);
+        if (!shape.splitted) {
+            const splittedShape = shape.splitRectangle(length, spaceBetween);
+            this.splittedShapes[shape.uuid] = splittedShape;
+            splittedShape.segments.forEach((segment) => {
+                this.splittedShapeSource.addFeature(segment.feature);
+                this.splittedToShape[segment.uuid] = rectId;
+            }); 
+        }
     }
     splitAll(length, spaceBetween) {
         for (let id in this.shapes) {
-            this.shapes[id].splitRectangle(length, spaceBetween);
+            console.log("splitting " + id);
+            this.splitRectangle(id, length, spaceBetween);
         }
     }
 }
@@ -404,6 +441,7 @@ class Rectangle{
         this.id = null;
         this.name = null;
         this.type = null;
+        this.splitted = false;
     }
 
     initFeature() {
@@ -471,7 +509,7 @@ class Rectangle{
     selectedStyle() {
         this.feature.setStyle(
             new ol.style.Style({
-                fill: new ol.style.Fill({color: [255, 178, 0, 0.5]}),
+                fill: new ol.style.Fill({color: [255, 178, 0, 0.6]}),
                 stroke: new ol.style.Stroke({
                             color: "black",
                             width: 1
@@ -483,7 +521,7 @@ class Rectangle{
     restoreStyle() {
         this.feature.setStyle(
             new ol.style.Style({
-                fill: new ol.style.Fill({color: [255, 0, 0, 0.5]}),
+                fill: new ol.style.Fill({color: [255, 0, 0, 0.6]}),
                 stroke: new ol.style.Stroke({
                             color: "black",
                             width: 1,
@@ -574,26 +612,65 @@ class Rectangle{
         if ((this.lowerRight.x - this.lowerLeft.x) > (this.upperLeft.y - this.lowerLeft.y)) 
             vertical = false;
         let remainingSpace = vertical ? this.upperLeft.y - this.lowerLeft.y : this.lowerRight.x - this.lowerLeft.x;
-        while (remainingSpace >= length) { // da riguardare, non sono convinto
+        while (remainingSpace >= length * 1.5) { // da riguardare, non sono convinto
             let points = [];
             if (vertical) {
-                points.push(current);
-                points.push(new Point(this.lowerRight.x, current.y));
-                points.push(new Point(this.lowerRight.x, current.y + length));
-                points.push(new Point(current.x, current.y + length));
-                points.push(current);
-                current = new Point(current.x, current.y + spaceBetween);
+                points.push(current.getArray());
+                points.push(new Point(this.lowerRight.x, current.y).getArray());
+                points.push(new Point(this.lowerRight.x, current.y + length).getArray());
+                points.push(new Point(current.x, current.y + length).getArray());
+                points.push(current.getArray());
+                current = new Point(current.x, current.y + spaceBetween + length);
             } else {
-                points.push(current);
-                points.push(new Point(current.x + length, current.y));
-                points.push(new Point(current.x + length, this.upperLeft.y));
-                points.push(new Point(current.x, this.upperLeft.y));
-                points.push(current);
+                points.push(current.getArray());
+                points.push(new Point(current.x + length, current.y).getArray());
+                points.push(new Point(current.x + length, this.upperLeft.y).getArray());
+                points.push(new Point(current.x, this.upperLeft.y).getArray());
+                points.push(current.getArray());
+                current = new Point(current.x + spaceBetween + length, current.y);
             }
             segments.push(new Segment(points));
-            remainingSpace = vertical ? current.y - this.lowerLeft.y : current.x - this.lowerLeft.x;
+            remainingSpace -= length;
         }
-        console.log(segments);
+        if (remainingSpace - length >= 0.5 * length) {
+            let points = [];
+            if (vertical) {
+                points.push(current.getArray());
+                points.push(new Point(this.lowerRight.x, current.y).getArray());
+                points.push(new Point(this.lowerRight.x, current.y + length).getArray());
+                points.push(new Point(current.x, current.y + length).getArray());
+                points.push(current.getArray());
+                current = new Point(current.x, current.y + spaceBetween);
+            } else {
+                points.push(current.getArray());
+                points.push(new Point(current.x + length, current.y).getArray());
+                points.push(new Point(current.x + length, this.upperLeft.y).getArray());
+                points.push(new Point(current.x, this.upperLeft.y).getArray());
+                points.push(current.getArray());
+                current = new Point(current.x + spaceBetween, current.y);
+            }
+            segments.push(new Segment(points));
+            remainingSpace -= length;
+        }
+        if (remainingSpace > 0) {
+            let points = [];
+            if (vertical) {
+                points.push(current.getArray());
+                points.push(new Point(this.lowerRight.x, current.y).getArray());
+                points.push(new Point(this.lowerRight.x, current.y + remainingSpace).getArray());
+                points.push(new Point(current.x, current.y + remainingSpace).getArray());
+                points.push(current.getArray());
+            } else {
+                points.push(current.getArray());
+                points.push(new Point(current.x + remainingSpace, current.y).getArray());
+                points.push(new Point(current.x + remainingSpace, this.upperLeft.y).getArray());
+                points.push(new Point(current.x, this.upperLeft.y).getArray());
+                points.push(current.getArray());
+            }
+            segments.push(new Segment(points));
+        }
+        this.splitted = true;
+        return new SegmentedRectangle(segments, this.uuid);
     }
 }
 
@@ -640,6 +717,15 @@ class Segment {
         this.feature = new ol.Feature(polygon);
         this.uuid = Rectangle.create_UUID();
         this.feature.id = this.uuid;
+        this.feature.setStyle(
+            new ol.style.Style({
+                fill: new ol.style.Fill({color: [23, 58, 161, 0.2]}),
+                stroke: new ol.style.Stroke({
+                            color: "black",
+                            width: 1
+                        })
+            })
+        );
     }
     toRepr() {
         let format = new ol.format.WKT();
@@ -648,6 +734,14 @@ class Segment {
             "uuid": this.uuid,
             "wkt": wkt
         };
+    }
+    static fromRepr(raw) {
+        let format = new ol.format.WKT();
+        let feature = format.readFeature(raw['wkt']).getGeometry().getCoordinates()[0];
+        let segment = new Segment(feature);
+        segment.uuid = raw['uuid'] ? raw['uuid'] : Rectangle.create_UUID();
+        segment.feature.id = segment.uuid;
+        return segment;
     }
 }
 
@@ -665,6 +759,13 @@ class SegmentedRectangle {
             "mainShapeId": this.mainShapeId,
             "segments": segmentsRepr
         };
+    }
+    static fromRepr(raw) {
+        let segments = [];
+        raw["segments"].forEach((segment) => {
+            segments.push(Segment.fromRepr(segment));
+        });
+        return new SegmentedRectangle(segments, raw["mainShapeId"]);
     }
 }
 
@@ -812,6 +913,12 @@ function splitSingle() {
     var segmentSize = $("#segmentSize").val();
     var spaceBetween = $("#segmentSpace").val();
     planView.splitRectangle(shapeId, segmentSize, spaceBetween);
+}
+function splitAll() {
+    $("#splitAllModal").modal('hide');
+    var segmentSize = $("#allSegmentSize").val();
+    var spaceBetween = $("#allSegmentSpace").val();
+    planView.splitAll(segmentSize, spaceBetween);
 }
 /*
 Aggiungere:
