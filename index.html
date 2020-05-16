@@ -1,140 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-	  <link rel="stylesheet" href="https://openlayers.org/en/v5.3.0/css/ol.css" type="text/css">
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
-            integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <script src="https://cdn.rawgit.com/openlayers/openlayers.github.io/master/en/v5.3.0/build/ol.js"></script>
-    <script type="text/javascript" src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
-    <script type="text/javascript" src="data.js"></script>
-    <script src="map.js"></script>
-    <style>
-        .dot-track {
-            height: 15px;
-            width: 15px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-
-
-        tbody {
-            display:block;
-            height:150px;
-            /*overflow:scroll;*/
-            overflow-x: hidden;
-            overflow-y: auto;
-        }
-        thead, tbody tr {
-            display:table;
-            width:100%;
-            table-layout:fixed;/* even columns width , fix width of table too*/
-        }
-
-        table {
-            width:100%;
-        }
-
-
-        html {
-            margin: 1em;
-        }
-
-        #tablesConfig {
-            display: none;
-        }
-        .inputOutput {
-          display: none;
-        }
-    </style>
-
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Store layout Graph - Drawing tool</title>
+	<style type="text/css">
+	html,body{margin:0px;height:100%;width:100%}
+	.container{width:100%;height:100%}
+	.inputOutput {
+	      display: none;
+	    }
+	</style>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maptalks/dist/maptalks.css">
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+	<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/maptalks/dist/maptalks.min.js"></script>
+	<script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+	<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+	<script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+	<!--To convert wkt to geoJSON-->
+	<script src="https://unpkg.com/terraformer@1.0.8"></script>
+	<script src="https://unpkg.com/terraformer-wkt-parser@1.1.2"></script>
+	<script type="text/javascript" src="data.js"></script>
+ 	<script type="text/javascript" src="zones.js"></script>
+ 	<script type="text/javascript" src="store-graph.js"></script>
 </head>
 <body onload="init()">
-  <!--Single split Modal -->
-    <div class="modal fade" id="splitModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
-      <div class="modal-dialog" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-            <h4 class="modal-title" id="myModalLabel">Split shape</h4>
-          </div>
-          <div class="modal-body">
-            <form>
-              <div class="form-group">
-                <label for="segmentSize">Segment length (mm)</label>
-                <div class="col-sm-10">
-                  <input type="number" class="form-control" id="segmentSize" value="1000" min="0">
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="segmentSpace">Space between segments (mm)</label>
-                <div class="col-sm-10">
-                  <input type="number" class="form-control" id="segmentSpace" value="0" min="0">
-                </div>
-              </div>
-            </form>
-            <input type="hidden" id="shapeIdModal">
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary" onclick="splitSingle()">Split</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  <!--All split Modal -->
-    <div class="modal fade" id="splitAllModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
-      <div class="modal-dialog" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-            <h4 class="modal-title" id="myModalLabel">Split all the shapes</h4>
-          </div>
-          <div class="modal-body">
-            <form>
-              <div class="form-group">
-                <label for="segmentSize">Segment length (mm)</label>
-                <div class="col-sm-10">
-                  <input type="number" class="form-control" id="allSegmentSize" value="1000" min="0">
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="segmentSpace">Space between segments (mm)</label>
-                <div class="col-sm-10">
-                  <input type="number" class="form-control" id="allSegmentSpace" value="0" min="0">
-                </div>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary" onclick="splitAll()">Split all</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  <div  style="padding-top: 10px; padding-left: 10px">
-      <div class="row">
-      	<div class="col-xs-12 col-md-8">
-          <button class="btn btn-default btn-lg active" id="drawButton" onclick="startDraw()">Draw</button>
-          <button class="btn btn-default btn-lg" id="editButton" onclick="startEdit()">Edit shapes</button>
-          <button class="btn btn-default btn-lg" id="editButton" onclick="showExport()">Export data <span class="caret"></button>
-          <button class="btn btn-default btn-lg" id="editButton" onclick="showImport()">Import data <span class="caret"></button>
-        </div>
-        <div class="col-xs-6 col-md-4">
-          <button class="btn btn-default btn-lg" id="undoButton" onclick="undo()" disabled>Undo</button>
-        </div>
-      </div>
-      <div id="modeDisplay"></div>
+	<div style="padding-top: 10px; padding-left: 10px">
+	    <div class="row">
+	        <div class="col-xs-12 col-md-8">
+	            <button class="btn btn-default btn-lg" id="editButton" onclick="showExport()">Export data<span class="caret"></button>
+	            <button class="btn btn-default btn-lg" id="editButton" onclick="showImport()">Import data<span class="caret"></button>
+	            <button class="btn btn-default btn-lg" id="editButton" onclick="createGraph()">Create graph<span class="caret"></button>
+				<div class="custom-control custom-switch">
+					<input type="checkbox" class="custom-control-input" id="editSwitch" onclick="editSwitchClick()">
+					<label class="custom-control-label" for="editSwitch">Edit shapes</label>
+				</div>
+				<div class="custom-control custom-switch">
+					<input type="checkbox" class="custom-control-input" id="showZonesSwitch" onclick="showZonesClick()">
+					<label class="custom-control-label" for="showZonesSwitch">Show zones</label>
+				</div>
+	        </div>
+	        <div class="col-xs-6 col-md-4">
+	          <button class="btn btn-default btn-lg" id="undoButton" onclick="undo()">Undo last draw</button>
+	        </div>
+	    	<div id="modeDisplay"></div>
+	    </div>
+	</div>
+
+	<div style="padding-top: 30px;" display="none" id="controlZones" class="inputOutput">
+		<div class="custom-control custom-switch">
+			<input type="checkbox" class="custom-control-input" id="showDivisions" onclick="showZones()">
+			<label class="custom-control-label" for="showDivisions">Show divisions</label>
+		</div>
+		<div class="custom-control custom-switch">
+			<input type="checkbox" class="custom-control-input" id="showDepartments" onclick="showZones()">
+			<label class="custom-control-label" for="showDepartments">Show departments</label>
+		</div>
+		<div class="custom-control custom-switch">
+			<input type="checkbox" class="custom-control-input" id="showAisles" onclick="showZones()">
+			<label class="custom-control-label" for="showAisles">Show aisles</label>
+		</div>
   </div>
 
-  <div style="padding-top: 30px;" display="none" id="exportDataDiv" class="inputOutput">
-    <figure class="highlight">
-      <pre>
-        <code id="exportData"></code>
-      </pre>
-    </figure>
+	<div style="padding-top: 30px;" display="none" id="exportDataDiv" class="inputOutput">
+		<button type="button" class="btn btn-dark" onclick="copyToClipboard()">Copy to clipboard</button>
+		<textarea class="form-control" id="exportDataCopy" rows="15" readonly></textarea>
   </div>
 
   <div style="padding-top: 30px; visibility='hidden';" id="importDataDiv" class="inputOutput">
@@ -147,42 +78,6 @@
     </form>
   </div>
 
-  <div  style="padding-top: 30px;">
-      <div class="row">
-          <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12">
-              <button id="showConfig" class="btn btn-warning" type="button" value="Configuration"
-                      onclick="toggleVisible()">Configuration <span class="caret"></span></button>
-          </div>
-      </div>
-  </div>
-
-  <div id="tablesConfig">
-      <div class="row" style="padding-top: 15px">
-          <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12">
-              <h3>Nodes</h3>
-              <table class="table table-striped table-hover table-bordered" id="tableNodes">
-                  <thead>
-                  <tr>
-                      <th scope="col">Node ID</th>
-                      <th scope="col">Node name</th>
-                      <th scope="col">Node type</th>
-                      <th scope="col">
-                        <button type='submit' class='btn btn-default' onclick='applyAll()'>Apply All</button>
-                        <button type='submit' class='btn btn-default' onclick='editAll()'>Edit All</button>
-                        <button type='submit' class='btn btn-default' onclick='deleteAll()'>Delete All</button>
-                        <button type='submit' class='btn btn-default' data-toggle="modal" data-target="#splitAllModal">Split All</button>
-                      </th>
-                  </tr>
-                  </thead>
-                  <tbody></tbody>
-              </table>
-          </div>
-      </div>
-  </div>
-  <div class="row">
-      <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12">
-          <div id="maps"  style="padding-top: 15px"></div>
-      </div>
-  </div>
-  </body>
+	<div id="map" class="container"></div>
+</body>
 </html>
